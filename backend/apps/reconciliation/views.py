@@ -41,6 +41,9 @@ class RunSummarySerializer(serializers.ModelSerializer):
             "value_reconciled",
             "value_in_dispute",
             "money_at_risk",
+            "uncollected_revenue",
+            "refund_obligations",
+            "needs_investigation",
             "breakdown",
         )
 

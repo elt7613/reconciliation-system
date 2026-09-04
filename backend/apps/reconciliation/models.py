@@ -16,6 +16,9 @@ class ReconciliationRun(models.Model):
     value_reconciled = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     value_in_dispute = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     money_at_risk = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    uncollected_revenue = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    refund_obligations = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    needs_investigation = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     breakdown = models.JSONField(default=dict)  # {type: {count, amount, severity}}
 
     class Meta:

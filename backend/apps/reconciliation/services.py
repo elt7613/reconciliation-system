@@ -55,6 +55,9 @@ def run_reconciliation(batch) -> ReconciliationRun:
         value_reconciled=stats.value_reconciled,
         value_in_dispute=stats.value_in_dispute,
         money_at_risk=stats.money_at_risk,
+        uncollected_revenue=stats.uncollected_revenue,
+        refund_obligations=stats.refund_obligations,
+        needs_investigation=stats.needs_investigation,
         breakdown=stats.breakdown,
     )
     Discrepancy.objects.bulk_create(
