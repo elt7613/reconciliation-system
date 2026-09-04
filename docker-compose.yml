@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,20 +17,27 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/recon
       DJANGO_SETTINGS_MODULE: config.settings.prod
-      SECRET_KEY: ${SECRET_KEY:-change-me}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
       DEBUG: "False"
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8000}
+      SPA_DIR: /app/spa
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-google/gemini-2.5-flash}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
+      LLM_ENABLED: ${LLM_ENABLED:-true}
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "${APP_PORT:-8000}:8000"
 
 volumes:
   pgdata:
