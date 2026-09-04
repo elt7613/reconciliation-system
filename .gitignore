@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Django
+db.sqlite3
+backend/staticfiles/
+backend/media/
+
+# Env — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+frontend/dist/
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store

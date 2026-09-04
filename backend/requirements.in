@@ -1,0 +1,11 @@
+# Direct dependencies (pinned exact versions in requirements.txt)
+Django
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+django-environ
+psycopg2-binary
+pydantic
+pydantic-ai
+pytest
+pytest-django
