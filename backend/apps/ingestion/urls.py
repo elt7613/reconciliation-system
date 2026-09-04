@@ -1,6 +1,11 @@
-"""Routes for ingestion — populated in later steps."""
-from django.urls import path  # noqa: F401
+"""Ingestion routes."""
+from django.urls import path
+
+from .views import BatchListView, UploadView
 
 app_name = "ingestion"
 
-urlpatterns = []
+urlpatterns = [
+    path("imports/", UploadView.as_view(), name="upload"),
+    path("batches/", BatchListView.as_view(), name="batches"),
+]
