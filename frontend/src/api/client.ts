@@ -1,7 +1,9 @@
 import axios from "axios";
 
+// Production (Dokploy split deployment): VITE_API_BASE_URL is baked in at
+// build time via a Docker build arg. Local dev: empty → Vite proxy to :8000.
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: `${import.meta.env.VITE_API_BASE_URL ?? ""}/api`,
 });
 
 // Attach the access token to every request
@@ -24,7 +26,7 @@ api.interceptors.response.use(
         const refresh = localStorage.getItem("refresh");
         if (!refresh) return null;
         try {
-          const { data } = await axios.post("/api/auth/refresh/", { refresh });
+          const { data } = await api.post("/auth/refresh/", { refresh });
           localStorage.setItem("access", data.access);
           return data.access as string;
         } catch {

@@ -3,6 +3,7 @@ import type { RunSummary } from "../api/reconciliation";
 export const TYPE_LABELS: Record<string, string> = {
   missing_payment: "Missing payment",
   orphan_charge: "Orphan charge",
+  orphan_refund: "Orphan refund",
   duplicate_charge: "Duplicate charge",
   amount_mismatch: "Amount mismatch",
   charged_after_cancellation: "Charged after cancellation",

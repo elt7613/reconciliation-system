@@ -10,18 +10,15 @@ env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, []),
     CORS_ALLOWED_ORIGINS=(list, []),
-    SPA_DIR=(str, ""),
-    # LLM / agent configuration — all swappable without touching code
-    OPENROUTER_API_KEY=(str, ""),
-    OPENROUTER_MODEL=(str, "google/gemini-2.5-flash"),
-    OPENROUTER_BASE_URL=(str, "https://openrouter.ai/api/v1"),
-    LLM_TEMPERATURE=(float, 0.1),
-    LLM_MAX_RETRIES=(int, 2),
-    LLM_TIMEOUT_SECONDS=(int, 30),
-    LLM_ENABLED=(bool, True),
+    # AI microservice connection — the LLM runs in ai-service/ (FastAPI)
+    AI_SERVICE_URL=(str, "http://127.0.0.1:8001"),
+    AI_SERVICE_API_KEY=(str, ""),
+    AI_SERVICE_TIMEOUT_SECONDS=(int, 50),
+    AI_ENABLED=(bool, True),
 )
 
-environ.Env.read_env(BASE_DIR.parent / ".env")
+# This app's own env file lives in backend/ (DATABASE_URL, SECRET_KEY, ...)
+environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("SECRET_KEY", default="dev-only-insecure-key-change-me")
 
@@ -49,6 +46,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -63,7 +61,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [Path(env("SPA_DIR") or BASE_DIR.parent / "frontend" / "dist")],
+        "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -113,19 +111,27 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
-SPA_ROOT = Path(env("SPA_DIR") or BASE_DIR.parent / "frontend" / "dist")
-STATICFILES_DIRS = [SPA_ROOT / "assets"]
+# The backend is API-only — the SPA is served by its own container.
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# WhiteNoise serves collected static files (incl. the SPA bundle) in production
+# without needing a web server; safe no-op in dev.
+STORAGES = {
+    "default": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Expose agent settings to apps via a single namespaced object
-LLM_SETTINGS = {
-    "api_key": env("OPENROUTER_API_KEY"),
-    "model": env("OPENROUTER_MODEL"),
-    "base_url": env("OPENROUTER_BASE_URL"),
-    "temperature": env("LLM_TEMPERATURE"),
-    "max_retries": env("LLM_MAX_RETRIES"),
-    "timeout_seconds": env("LLM_TIMEOUT_SECONDS"),
-    "enabled": env("LLM_ENABLED"),
+# Connection to the AI microservice (see ai-service/). All swappable via env;
+# the explain layer degrades to deterministic fallbacks when unreachable.
+AI_SERVICE = {
+    "url": env("AI_SERVICE_URL"),
+    "api_key": env("AI_SERVICE_API_KEY"),
+    "timeout_seconds": env("AI_SERVICE_TIMEOUT_SECONDS"),
+    "enabled": env("AI_ENABLED"),
 }

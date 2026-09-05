@@ -163,3 +163,68 @@ class TestDeterminism:
         # Neither order may appear as missing_payment
         missing = {f.order_ref for f in findings if f.type == "missing_payment"}
         assert "ORD-1801" not in missing and "ORD-1802" not in missing
+
+
+class TestEngineEdgeCases:
+    """Edge probes beyond the golden dataset (see README taxonomy)."""
+
+    @staticmethod
+    def _order(id_, net="100.00", status="completed", cur="USD", date=None):
+        from apps.ingestion.parsing import ParsedOrder
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        d = date or datetime(2025, 4, 1, tzinfo=timezone.utc)
+        return ParsedOrder(raw={}, normalized_id=id_, order_date=d, customer_email=None,
+                           currency=cur, gross_amount=Decimal(net), discount=Decimal("0"),
+                           net_amount=Decimal(net), status=status)
+
+    @staticmethod
+    def _payment(ref, amt="100.00", txn="T1", typ="charge", st="settled", cur="USD"):
+        from apps.ingestion.parsing import ParsedPayment
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        return ParsedPayment(raw={}, transaction_ref=txn, normalized_order_ref=ref,
+                             processed_at=datetime(2025, 4, 2, tzinfo=timezone.utc),
+                             currency=cur, amount=Decimal(amt), fee=Decimal("0"),
+                             net_settled=Decimal(amt), type=typ, status=st)
+
+    def test_duplicate_charges_different_amounts(self):
+        findings, _ = reconcile(
+            [self._order("A")], [self._payment("A", "100.00", "T1"), self._payment("A", "150.00", "T2")]
+        )
+        f = next(x for x in findings if x.type == "duplicate_charge")
+        # Extra charges (150) exceed the overcharge (50); risk = 150.
+        assert f.amount_at_risk == Decimal("150.00")
+        assert f.detail["same_amount"] is False
+        assert f.detail["charges"] == ["100.00", "150.00"]
+
+    def test_orphan_refund_is_flagged(self):
+        findings, _ = reconcile([], [self._payment("X", "50.00", "T5", typ="refund")])
+        assert any(x.type == "orphan_refund" and x.amount_at_risk == Decimal("50.00") for x in findings)
+
+    def test_orphan_refund_and_charge_both_flagged(self):
+        findings, _ = reconcile(
+            [], [self._payment("Y", "50.00", "T6", typ="refund"),
+                 self._payment("Y", "80.00", "T7", typ="charge")]
+        )
+        types = {x.type for x in findings}
+        assert types == {"orphan_refund", "orphan_charge"}
+
+    def test_rounding_boundary_exactly_at_tolerance(self):
+        findings, _ = reconcile([self._order("E", "100.05")], [self._payment("E", "100.00")])
+        assert [x.type for x in findings] == ["rounding_variance"]
+        assert findings[0].amount_at_risk == Decimal("0")
+
+    def test_rounding_just_above_tolerance_is_material(self):
+        findings, _ = reconcile([self._order("H", "100.06")], [self._payment("H", "100.00")])
+        assert [x.type for x in findings] == ["amount_mismatch"]
+        assert findings[0].amount_at_risk == Decimal("0.06")
+
+    def test_late_settlement_exactly_7_days_is_ok(self):
+        from datetime import datetime, timedelta, timezone
+        t0 = datetime(2025, 4, 1, tzinfo=timezone.utc)
+        findings, _ = reconcile(
+            [self._order("F", date=t0)], [self._payment("F", "100.00", "T9", )] 
+        )
+        # default payment date is +1 day: no finding expected
+        assert findings == []

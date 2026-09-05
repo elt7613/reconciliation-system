@@ -30,8 +30,3 @@ export async function loadSampleData() {
   const { data } = await api.post("/imports/sample/");
   return data as { batch: Batch; run_id: number };
 }
-
-export async function listBatches() {
-  const { data } = await api.get("/batches/");
-  return data.results as Batch[];
-}

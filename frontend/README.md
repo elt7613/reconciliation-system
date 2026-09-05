@@ -1,32 +1,39 @@
-# React + TypeScript + Vite
+# Frontend — Reconciliation Dashboard SPA
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + TypeScript + Vite + Tailwind CSS + Recharts.
 
-Currently, two official plugins are available:
+## Structure
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+src/
+  api/          typed API clients (auth, ingestion, reconciliation) over the shared
+                axios instance with JWT attach + auto-refresh
+  auth/         AuthContext (login/signup/logout, session restore via /me)
+  pages/        Login, Signup, Import (upload + sample data), Dashboard
+  components/   Layout, HeadlineCards (headline + risk buckets), TypeChart,
+                DiscrepancyTable (filters/search/pagination), DetailDrawer
+                (raw records + AI explain flow)
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Commands
+
+```bash
+npm install
+npm run dev      # dev server on :5173, proxies /api to the Django backend on :8000
+npm run build    # production bundle to dist/ (assets under dist/assets)
+npx tsc -b --noEmit   # typecheck
+```
+
+## Notes
+
+- Assets are built with the default base (`/`): the SPA is served at its own
+  domain root (`serve -s` in its own container), routes are normal
+  (`/`, `/login`, `/assets/...`).
+- All state for the LLM features has explicit loading / error+retry / degraded
+  handling — see `pages/Dashboard.tsx` (AI summary) and `components/DetailDrawer.tsx`
+  (per-finding explanation).
+- Auth tokens live in localStorage only (no cookies); the axios interceptor
+  refreshes once on 401 and logs out if refresh fails.
+
+See the repo-root README for the full system architecture and DEPLOYMENT.md for
+how this app is built and served in production.

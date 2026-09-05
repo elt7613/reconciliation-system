@@ -28,6 +28,7 @@ export default function DetailDrawer({
   const [explanation, setExplanation] = useState<ExplanationPayload | null>(null);
   const [explaining, setExplaining] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,12 +50,16 @@ export default function DetailDrawer({
   const onExplain = async () => {
     setExplaining(true);
     setExplainError(null);
+    setElapsed(0);
+    const startedAt = Date.now();
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - startedAt) / 1000)), 1000);
     try {
       const data = await explainDiscrepancy(discrepancy.id);
       setExplanation(data);
     } catch {
       setExplainError("The AI explanation failed. You can retry or work from the raw facts below.");
     } finally {
+      clearInterval(timer);
       setExplaining(false);
     }
   };
@@ -152,10 +157,15 @@ export default function DetailDrawer({
             </div>
 
             {explaining && (
-              <div className="rounded-xl border border-slate-200 p-4 animate-pulse space-y-2">
-                <div className="h-3 bg-slate-200 rounded w-3/4" />
-                <div className="h-3 bg-slate-200 rounded w-1/2" />
-                <div className="h-3 bg-slate-200 rounded w-2/3" />
+              <div className="space-y-2">
+                <div className="rounded-xl border border-slate-200 p-4 animate-pulse space-y-2">
+                  <div className="h-3 bg-slate-200 rounded w-3/4" />
+                  <div className="h-3 bg-slate-200 rounded w-1/2" />
+                  <div className="h-3 bg-slate-200 rounded w-2/3" />
+                </div>
+                <p className="text-xs text-slate-400 text-center">
+                  Asking the model… usually 5–20s ({elapsed}s)
+                </p>
               </div>
             )}
 

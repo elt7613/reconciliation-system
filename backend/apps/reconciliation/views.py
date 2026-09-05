@@ -1,5 +1,6 @@
 """Reconciliation API: run list/detail, discrepancy drill-down with filters/search."""
 from django.contrib.auth import get_user_model
+from django.db.models import Case, Value, When
 from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -116,11 +117,21 @@ class RunDiscrepanciesView(APIView):
                 Q(order_ref__icontains=search) | Q(transaction_refs__icontains=search)
             )
 
-        ordering = request.GET.get("ordering", "type")
+        # Default ordering: severity first (high → medium → low → info), then
+        # amount at risk descending, then a stable tiebreaker. Users can still
+        # sort explicitly via ?ordering=.
+        severity_rank = Case(
+            When(severity="high", then=Value(0)),
+            When(severity="medium", then=Value(1)),
+            When(severity="low", then=Value(2)),
+            When(severity="info", then=Value(3)),
+            default=Value(4),
+        )
+        ordering = request.GET.get("ordering", "")
         if ordering.lstrip("-") in ("type", "severity", "order_ref", "amount_at_risk"):
             qs = qs.order_by(ordering)
         else:
-            qs = qs.order_by("type", "order_ref")
+            qs = qs.order_by(severity_rank, "-amount_at_risk", "order_ref")
 
         from rest_framework.pagination import PageNumberPagination
 

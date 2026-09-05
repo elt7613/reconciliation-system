@@ -141,8 +141,16 @@ def reconcile(orders: list, payments: list) -> tuple[list[Finding], Stats]:
 
         # Order is completed from here on.
         if len(settled_charges) > 1:
-            # Multiple settled charges: the customer paid extra times.
+            # Multiple settled charges. The extra charges are refund obligations;
+            # charges are ordered by transaction ref (stable), and the first is
+            # treated as the legitimate one. Amounts may differ (e.g. a
+            # double-submit with a changed price) — risk = everything beyond the
+            # order's own net, capped at the sum of the extra charges.
             extra = sum((p.amount for p in settled_charges[1:]), Decimal("0"))
+            total_charged = sum((p.amount for p in settled_charges), Decimal("0"))
+            overcharge_beyond_net = total_charged - order.net_amount
+            risk = extra if overcharge_beyond_net <= extra else overcharge_beyond_net
+            amounts = {p.amount for p in settled_charges}
             findings.append(
                 Finding(
                     type="duplicate_charge",
@@ -150,12 +158,14 @@ def reconcile(orders: list, payments: list) -> tuple[list[Finding], Stats]:
                     risk_bucket="refund_obligation",
                     order_ref=order.normalized_id,
                     transaction_refs=[p.transaction_ref for p in settled_charges],
-                    amount_at_risk=extra,
+                    amount_at_risk=risk,
                     detail={
                         "order_net": str(order.net_amount),
-                        "charged_each": str(settled_charges[0].amount),
+                        "first_charge": str(settled_charges[0].amount),
+                        "charges": [str(p.amount) for p in settled_charges],
                         "times_charged": len(settled_charges),
                         "duplicate_txns": [p.transaction_ref for p in settled_charges[1:]],
+                        "same_amount": len(amounts) == 1,
                     },
                 )
             )
@@ -286,21 +296,38 @@ def reconcile(orders: list, payments: list) -> tuple[list[Finding], Stats]:
                 )
 
     # --- Pass 2: payments with no order ---
+    # Both directions are alarming: money charged with no order (orphan_charge)
+    # and money refunded out with no order (orphan_refund) — the latter can
+    # indicate a refund against a deleted/fraudulent order or an export gap.
     for ref, group in payments_by_ref.items():
         if ref in order_ids:
             continue
-        settled = [p for p in group if p.status == "settled" and p.type == "charge"]
-        if settled:
-            total = sum((p.amount for p in settled), Decimal("0"))
+        settled_charges = [p for p in group if p.status == "settled" and p.type == "charge"]
+        settled_refunds = [p for p in group if p.status == "settled" and p.type == "refund"]
+        if settled_charges:
+            total = sum((p.amount for p in settled_charges), Decimal("0"))
             findings.append(
                 Finding(
                     type="orphan_charge",
                     severity="high",
                     risk_bucket="investigation",
                     order_ref=ref,
-                    transaction_refs=[p.transaction_ref for p in settled],
+                    transaction_refs=[p.transaction_ref for p in settled_charges],
                     amount_at_risk=total,
-                    detail={"charged": str(total), "txns": [p.transaction_ref for p in settled]},
+                    detail={"charged": str(total), "txns": [p.transaction_ref for p in settled_charges]},
+                )
+            )
+        if settled_refunds:
+            total = sum((p.amount for p in settled_refunds), Decimal("0"))
+            findings.append(
+                Finding(
+                    type="orphan_refund",
+                    severity="high",
+                    risk_bucket="investigation",
+                    order_ref=ref,
+                    transaction_refs=[p.transaction_ref for p in settled_refunds],
+                    amount_at_risk=total,
+                    detail={"refunded": str(total), "txns": [p.transaction_ref for p in settled_refunds]},
                 )
             )
 

@@ -34,6 +34,7 @@ class Discrepancy(models.Model):
     class Type(models.TextChoices):
         MISSING_PAYMENT = "missing_payment"
         ORPHAN_CHARGE = "orphan_charge"
+        ORPHAN_REFUND = "orphan_refund"
         DUPLICATE_CHARGE = "duplicate_charge"
         AMOUNT_MISMATCH = "amount_mismatch"
         CHARGED_AFTER_CANCELLATION = "charged_after_cancellation"

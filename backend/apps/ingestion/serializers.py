@@ -5,7 +5,7 @@ from .models import ImportBatch
 
 
 class ImportBatchSerializer(serializers.ModelSerializer):
-    run_id = serializers.IntegerField(source="latest_run.id", read_only=True, default=None)
+    run_id = serializers.SerializerMethodField()
 
     class Meta:
         model = ImportBatch
@@ -19,3 +19,6 @@ class ImportBatchSerializer(serializers.ModelSerializer):
             "warnings",
             "run_id",
         )
+
+    def get_run_id(self, obj: ImportBatch) -> int | None:
+        return obj.runs.order_by("-created_at").values_list("id", flat=True).first()

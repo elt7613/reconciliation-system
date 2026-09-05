@@ -57,3 +57,25 @@ def test_me_with_token(client):
     resp = client.get("/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {login['access']}")
     assert resp.status_code == 200
     assert resp.json()["email"] == "a@b.co"
+
+
+def test_refresh_returns_new_access_token(client):
+    client.post("/api/auth/signup/", {"email": "a@b.co", "password": "Sup3rSecret!x"}, format="json")
+    login = client.post("/api/auth/login/", {"email": "a@b.co", "password": "Sup3rSecret!x"}, format="json").json()
+    resp = client.post("/api/auth/refresh/", {"refresh": login["refresh"]}, format="json")
+    assert resp.status_code == 200
+    assert "access" in resp.json()
+    # The new access token actually authenticates
+    resp2 = client.get("/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {resp.json()['access']}")
+    assert resp2.status_code == 200
+
+
+def test_refresh_with_garbage_token_fails(client):
+    resp = client.post("/api/auth/refresh/", {"refresh": "not-a-token"}, format="json")
+    assert resp.status_code == 401
+
+
+def test_health_endpoint_is_public(client):
+    resp = client.get("/api/health/")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}

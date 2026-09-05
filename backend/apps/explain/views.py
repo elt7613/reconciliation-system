@@ -1,9 +1,11 @@
 """Explain endpoints: LLM explanation for one discrepancy / summary for a filtered set.
 
-The LLM call is async; the view is sync and drives the coroutine via asyncio.run().
-This keeps ORM access simple and works under both WSGI and ASGI.
+The LLM lives in a separate FastAPI microservice (ai-service/). This app calls
+it over HTTP with a shared API key; every failure mode (service down, auth
+rejected, timeout, provider failure) degrades to a deterministic fallback so
+the dashboard never breaks. Failures are logged, never silent.
 """
-import asyncio
+import logging
 
 from django.contrib.auth import get_user_model
 from rest_framework.response import Response
@@ -11,9 +13,11 @@ from rest_framework.views import APIView
 
 from apps.reconciliation.models import Discrepancy, ReconciliationRun
 
-from .agents import explain_discrepancy_async, llm_available, summarize_findings_async
+from . import client
+from .sanitize import sanitize_payload
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 def _owned_discrepancy(user, disc_id: int) -> Discrepancy | None:
@@ -28,10 +32,10 @@ def _owned_discrepancy(user, disc_id: int) -> Discrepancy | None:
 
 def _fallback_explanation(disc: Discrepancy) -> dict:
     """Deterministic offline explanation — always available, never misleading."""
-    label = disc.get_type_display().replace("_", " ") if hasattr(disc, "get_type_display") else disc.type
+    label = disc.type.replace("_", " ")
     facts = ", ".join(f"{k}={v}" for k, v in disc.detail.items())
     return {
-        "summary": f"{label.replace('_', ' ').title()} on {disc.order_ref} — {disc.amount_at_risk} at risk.",
+        "summary": f"{label.title()} on {disc.order_ref} — {disc.amount_at_risk} at risk.",
         "likely_cause": (
             "AI explanation is unavailable. These are the deterministic facts from the "
             f"reconciliation engine: {facts}."
@@ -43,8 +47,12 @@ def _fallback_explanation(disc: Discrepancy) -> dict:
 
 
 def _discrepancy_payload(disc: Discrepancy) -> dict:
-    """Facts the LLM is allowed to see. Classification is ground truth."""
-    return {
+    """Facts the AI service is allowed to see. Classification is ground truth.
+
+    sanitize_payload strips control characters/newlines and bounds length so
+    crafted CSV values cannot smuggle instructions into the prompt.
+    """
+    payload = {
         "discrepancy_type": disc.type,
         "severity": disc.severity,
         "risk_bucket": disc.risk_bucket,
@@ -53,6 +61,7 @@ def _discrepancy_payload(disc: Discrepancy) -> dict:
         "amount_at_risk": str(disc.amount_at_risk),
         "engine_facts": disc.detail,
     }
+    return sanitize_payload(payload)
 
 
 class ExplainDiscrepancyView(APIView):
@@ -66,7 +75,7 @@ class ExplainDiscrepancyView(APIView):
         if disc.explanation and not disc.explanation.get("degraded"):
             return Response(disc.explanation)
 
-        if not llm_available():
+        if not client.is_configured():
             fallback = _fallback_explanation(disc)
             disc.explanation = fallback
             disc.save(update_fields=["explanation"])
@@ -74,10 +83,12 @@ class ExplainDiscrepancyView(APIView):
 
         payload = _discrepancy_payload(disc)
         try:
-            explanation = asyncio.run(explain_discrepancy_async(payload))
-            data = explanation.model_dump()
+            data = client.explain_discrepancy(payload)
             data["degraded"] = False
-        except Exception:
+        except client.AIServiceError as exc:
+            logger.warning(
+                "AI explanation failed for discrepancy %s: %s", disc.id, exc.reason
+            )
             data = _fallback_explanation(disc)
 
         disc.explanation = data
@@ -107,36 +118,12 @@ class SummarizeRunView(APIView):
             },
             "breakdown_by_type": run.breakdown,
         }
+        payload = sanitize_payload(payload)
 
-        if not llm_available():
-            return Response(
-                {
-                    "executive_summary": (
-                        "AI summary unavailable. Deterministic headline: "
-                        f"{run.matched_pairs} matched pairs, {run.value_in_dispute} in dispute, "
-                        f"{run.money_at_risk} at risk."
-                    ),
-                    "top_priorities": [
-                        f"{t}: {v['count']} case(s), {v['amount']} at risk"
-                        for t, v in sorted(
-                            run.breakdown.items(),
-                            key=lambda kv: float(kv[1]["amount"]),
-                            reverse=True,
-                        )[:3]
-                    ],
-                    "recommended_actions": ["Review the discrepancy table, highest amount first."],
-                    "degraded": True,
-                }
-            )
-
-        try:
-            summary = asyncio.run(summarize_findings_async(payload))
-            data = summary.model_dump()
-            data["degraded"] = False
-        except Exception:
-            data = {
+        def fallback_summary() -> dict:
+            return {
                 "executive_summary": (
-                    "AI summary failed. Deterministic headline: "
+                    "AI summary unavailable. Deterministic headline: "
                     f"{run.matched_pairs} matched pairs, {run.value_in_dispute} in dispute, "
                     f"{run.money_at_risk} at risk."
                 ),
@@ -151,4 +138,14 @@ class SummarizeRunView(APIView):
                 "recommended_actions": ["Review the discrepancy table, highest amount first."],
                 "degraded": True,
             }
+
+        if not client.is_configured():
+            return Response(fallback_summary())
+
+        try:
+            data = client.summarize_findings(payload)
+            data["degraded"] = False
+        except client.AIServiceError as exc:
+            logger.warning("AI summary failed for run %s: %s", run.id, exc.reason)
+            data = fallback_summary()
         return Response(data)

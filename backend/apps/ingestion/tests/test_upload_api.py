@@ -40,6 +40,42 @@ def test_upload_requires_auth():
     assert resp.status_code == 401
 
 
+def test_upload_bad_headers_rejected(auth_client):
+    import io
+
+    bad = io.StringIO("wrong,columns,here\n1,2,3\n")
+    resp = auth_client.post(
+        "/api/imports/",
+        {
+            "orders_file": bad,
+            "payments_file": io.StringIO("also,wrong\n1,2\n"),
+        },
+        format="multipart",
+    )
+    assert resp.status_code == 400
+    assert "missing columns" in resp.json()["detail"]
+
+
+def test_sample_endpoint_creates_run(auth_client):
+    resp = auth_client.post("/api/imports/sample/")
+    assert resp.status_code == 201, resp.content
+    data = resp.json()
+    assert data["batch"]["order_row_count"] == 184
+    assert data["batch"]["payment_row_count"] == 187
+    assert ReconciliationRun.objects.filter(id=data["run_id"]).exists()
+
+
+def test_batches_lists_run_id(auth_client):
+    with open(SAMPLE_DIR / "orders.csv", "rb") as o, open(SAMPLE_DIR / "payments.csv", "rb") as p:
+        resp = auth_client.post(
+            "/api/imports/", {"orders_file": o, "payments_file": p}, format="multipart"
+        )
+    run_id = resp.json()["run_id"]
+    batches = auth_client.get("/api/batches/").json()["results"]
+    assert len(batches) == 1
+    assert batches[0]["run_id"] == run_id
+
+
 def test_upload_creates_batch_and_run(auth_client):
     resp = _upload(auth_client)
     assert resp.status_code == 201, resp.content
