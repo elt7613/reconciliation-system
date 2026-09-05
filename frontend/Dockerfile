@@ -1,13 +1,17 @@
 # Frontend SPA — build with Vite, serve with `serve` (single-page mode).
 # No reverse proxy config needed: the SPA calls the backend at
 # VITE_API_BASE_URL (baked in at build time), so this container is pure static.
+#
+# Build context is the REPO ROOT (Dokploy runs: docker build -f frontend/Dockerfile .),
+# so every COPY path is prefixed with frontend/. Do not build with the service
+# directory itself as context — the paths below assume the repo root.
 FROM node:22-alpine AS build
 WORKDIR /web
-COPY package.json package-lock.json ./
+COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-COPY . .
+COPY frontend/ ./
 RUN npm run build
 
 FROM node:22-alpine

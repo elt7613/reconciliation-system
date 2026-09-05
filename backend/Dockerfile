@@ -1,4 +1,8 @@
 # Backend API — Django + DRF + gunicorn. API-only (SPA served separately).
+#
+# Build context is the REPO ROOT (Dokploy runs: docker build -f backend/Dockerfile .),
+# so every COPY path is prefixed with backend/. Do not build with the service
+# directory itself as context — the paths below assume the repo root.
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -6,13 +10,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
 
 # Sample CSVs ship with the app so the "Load sample data" button works anywhere.
 # (sample_data/ is inside backend/ in the repo.)
+
+COPY backend/ .
 
 RUN mkdir -p /app/staticfiles
 

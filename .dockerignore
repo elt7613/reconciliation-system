@@ -1,0 +1,13 @@
+# Root-context ignore. All three services build with the repo root as context
+# (docker build -f <svc>/Dockerfile .), so this single file covers them all.
+# "**" patterns match at any depth.
+.git
+**/.env
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/dist
+**/db.sqlite3
+backend/staticfiles

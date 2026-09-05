@@ -24,11 +24,10 @@ you'll paste it into the backend app's env as `DATABASE_URL`
 ## 2. Deploy the AI service (`ai-service/`)
 
 1. **Add Application** → connect your Git repo → build type **Dockerfile**.
-2. **Dockerfile Path**: `ai-service/Dockerfile` · **Build Path**: `/` ·
-   **Docker Context Path**: `/ai-service`.
-   The context path is required: Dokploy otherwise builds with the *repo root*
-   as context, and the Dockerfile's `COPY requirements.txt .` resolves inside
-   the context — the build fails with `/requirements.txt: not found`.
+2. **Dockerfile Path**: `ai-service/Dockerfile` · **Build Path**: `/`. Leave
+   **Docker Context Path** empty — the Dockerfiles expect the *repo root* as
+   context (Dokploy's default) and prefix their `COPY` paths accordingly
+   (e.g. `COPY ai-service/requirements.txt .`).
 3. **App name**: `ai-service` (this exact name is the DNS host the backend will
    call — e.g. `http://ai-service:8000`).
 4. **Environment variables** (Dokploy → Environment):
@@ -48,8 +47,8 @@ you'll paste it into the backend app's env as `DATABASE_URL`
 ## 3. Deploy the backend (`backend/`)
 
 1. **Add Application** → same Git repo → build type **Dockerfile**.
-2. **Dockerfile Path**: `backend/Dockerfile` · **Docker Context Path**: `/backend`
-   (same reason as the AI service — the context must be the service directory).
+2. **Dockerfile Path**: `backend/Dockerfile` (context is the repo root by
+   default — no context-path setting needed).
 3. **App name**: e.g. `backend`.
 4. **Environment variables**:
 
@@ -73,7 +72,7 @@ you'll paste it into the backend app's env as `DATABASE_URL`
 ## 4. Deploy the frontend (`frontend/`)
 
 1. **Add Application** → same Git repo → build type **Dockerfile**.
-2. **Dockerfile Path**: `frontend/Dockerfile` · **Docker Context Path**: `/frontend`.
+2. **Dockerfile Path**: `frontend/Dockerfile` (repo-root context, like the others).
 3. **Build Arguments** (Dokploy → Environment → Build Arguments — this is
    baked into the JS bundle at build time):
 
